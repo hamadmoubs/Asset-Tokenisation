@@ -1,0 +1,81 @@
+// giveTokens.js
+//
+// Run with:
+//   node giveTokens.js
+//
+// Make sure Ganache is running and the token contract is deployed.
+
+const Web3 = require("web3");
+
+// RPC for your development network (Ganache)
+const web3 = new Web3("http://127.0.0.1:7545");
+
+// 🔐 ACCOUNTS
+// account[0] must be the deployer of the token
+const DEPLOYER = "0x627306090abaB3A6e1400e9345bC60c78a8BEf57";  // accounts[0]
+const VENDOR   = "0xf17f52151EbEF6C7334FAD080c5704D77216b732";  // your Metamask account
+
+// 🔥 YOUR TOKEN ADDRESS (from _addresses.js)
+const TOKEN_ADDRESS = "0x8f0483125FCb9aaAEFA9209D8E9d7b9C8B9Fb90F";
+
+// Minimal ERC20 ABI (only balanceOf + transfer)
+const TOKEN_ABI = [
+  {
+    "constant": true,
+    "inputs": [{ "name": "owner", "type": "address" }],
+    "name": "balanceOf",
+    "outputs": [{ "name": "balance", "type": "uint256" }],
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      { "name": "to", "type": "address" },
+      { "name": "value", "type": "uint256" }
+    ],
+    "name": "transfer",
+    "outputs": [{ "name": "", "type": "bool" }],
+    "type": "function"
+  }
+];
+
+async function main() {
+  const token = new web3.eth.Contract(TOKEN_ABI, TOKEN_ADDRESS);
+
+  console.log("------------------------------------------------------");
+  console.log("Checking balances before transfer...");
+  console.log("------------------------------------------------------");
+
+  const beforeOwner = await token.methods.balanceOf(DEPLOYER).call();
+  const beforeVendor = await token.methods.balanceOf(VENDOR).call();
+
+  console.log("Owner balance:", web3.utils.fromWei(beforeOwner, "ether"));
+  console.log("Vendor balance:", web3.utils.fromWei(beforeVendor, "ether"));
+
+  console.log("\n------------------------------------------------------");
+  console.log("Transferring 1000 tokens to Vendor...");
+  console.log("------------------------------------------------------");
+
+  const amount = web3.utils.toWei("1000", "ether");
+
+  await token.methods
+    .transfer(VENDOR, amount)
+    .send({ from: DEPLOYER });
+
+  console.log("\nTransfer complete!");
+
+  const afterOwner = await token.methods.balanceOf(DEPLOYER).call();
+  const afterVendor = await token.methods.balanceOf(VENDOR).call();
+
+  console.log("\n------------------------------------------------------");
+  console.log("Balances AFTER transfer");
+  console.log("------------------------------------------------------");
+
+  console.log("Owner balance:", web3.utils.fromWei(afterOwner, "ether"));
+  console.log("Vendor balance:", web3.utils.fromWei(afterVendor, "ether"));
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

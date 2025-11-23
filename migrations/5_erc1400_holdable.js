@@ -1,7 +1,7 @@
 const ERC1400HoldableToken = artifacts.require('./ERC1400HoldableToken.sol');
 const Extension = artifacts.require('./ERC1400TokensValidator.sol');
 
-const controller = '0xb5747835141b46f7C472393B31F8F5A57F74A44f';
+const controller = '0xf17f52151EbEF6C7334FAD080c5704D77216b732';
 
 const partition1 = '0x7265736572766564000000000000000000000000000000000000000000000000'; // reserved in hex
 const partition2 = '0x6973737565640000000000000000000000000000000000000000000000000000'; // issued in hex

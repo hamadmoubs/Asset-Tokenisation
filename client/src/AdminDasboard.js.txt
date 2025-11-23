@@ -1,0 +1,89 @@
+import React, { useState, useEffect } from "react";
+import Web3 from "web3";
+import KYCWhitelistABI from "./KYCWhitelistABI.json";
+
+const KYC_ADDRESS = "PASTE_YOUR_DEPLOYED_KYC_CONTRACT_ADDRESS_HERE";
+
+function AdminDashboard() {
+  const [web3, setWeb3] = useState(null);
+  const [account, setAccount] = useState("");
+  const [contract, setContract] = useState(null);
+  const [userAddress, setUserAddress] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isOwner, setIsOwner] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      if (window.ethereum) {
+        const web3Instance = new Web3(window.ethereum);
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        const accounts = await web3Instance.eth.getAccounts();
+        const contractInstance = new web3Instance.eth.Contract(
+          KYCWhitelistABI,
+          KYC_ADDRESS
+        );
+
+        setWeb3(web3Instance);
+        setAccount(accounts[0]);
+        setContract(contractInstance);
+
+        // Check if current user is contract owner
+        const owner = await contractInstance.methods.owner().call();
+        setIsOwner(owner.toLowerCase() === accounts[0].toLowerCase());
+      } else {
+        alert("Please install MetaMask!");
+      }
+    };
+    load();
+  }, []);
+
+  const addToWhitelist = async () => {
+    try {
+      await contract.methods.addToWhitelist(userAddress).send({ from: account });
+      setStatusMessage(`✅ ${userAddress} successfully added to whitelist`);
+    } catch (error) {
+      console.error(error);
+      setStatusMessage("❌ Transaction failed. Only owner can whitelist.");
+    }
+  };
+
+  const removeFromWhitelist = async () => {
+    try {
+      await contract.methods.removeFromWhitelist(userAddress).send({ from: account });
+      setStatusMessage(`⚠️ ${userAddress} removed from whitelist`);
+    } catch (error) {
+      console.error(error);
+      setStatusMessage("❌ Transaction failed. Only owner can remove.");
+    }
+  };
+
+  return (
+    <div style={{ padding: "40px", textAlign: "center" }}>
+      <h1>👑 Admin Whitelist Dashboard</h1>
+      <p><strong>Connected Admin:</strong> {account}</p>
+
+      {!isOwner ? (
+        <p style={{ color: "red" }}>❌ You are not the contract owner!</p>
+      ) : (
+        <>
+          <input
+            placeholder="Enter user wallet address"
+            value={userAddress}
+            onChange={(e) => setUserAddress(e.target.value)}
+            style={{ width: "300px", padding: "8px", marginBottom: "10px" }}
+          />
+          <br />
+          <button onClick={addToWhitelist} style={{ marginRight: "10px" }}>
+            ✅ Add to Whitelist
+          </button>
+          <button onClick={removeFromWhitelist}>
+            ⚠️ Remove from Whitelist
+          </button>
+          <p style={{ marginTop: "20px" }}>{statusMessage}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+export default AdminDashboard;

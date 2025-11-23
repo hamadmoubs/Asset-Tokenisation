@@ -1,0 +1,8 @@
+// 🔧 YOUR ADDRESSES
+export const TOKEN_ADDRESS = "0xAa862ddAC09F6736A61E1124040Fd883A6533C19";
+export const KYC_ADDRESS   = "0xace937991395B2051613368206066EB2E752a333";
+export const MARKETPLACE_ADDRESS = "0x7BF7ae2DA6013aA8de29627E29e4b9fa807D4469";
+
+// Optional hard-coded admin *UI* gate (frontend side only).
+// On-chain owner is still enforced by the KYCWhitelist.sol `onlyOwner`.
+export const ADMIN_ADDRESS = "0xf17f52151EbEF6C7334FAD080c5704D77216b732";

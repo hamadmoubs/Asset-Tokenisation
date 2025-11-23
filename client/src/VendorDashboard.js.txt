@@ -1,0 +1,191 @@
+import React, { useEffect, useState } from "react";
+import { getWeb3, isAddress, nonZero } from "./_web3";
+import { ERC20_ABI, KYC_ABI, MARKETPLACE_ABI } from "./_abi";
+import { TOKEN_ADDRESS, KYC_ADDRESS, MARKETPLACE_ADDRESS } from "./_addresses";
+
+export default function VendorDashboard() {
+  const [web3, setWeb3] = useState(null);
+  const [account, setAccount] = useState("");
+  const [token, setToken] = useState(null);
+  const [kyc, setKyc] = useState(null);
+  const [market, setMarket] = useState(null);
+
+  const [isWhitelisted, setIsWhitelisted] = useState(false);
+  const [tokenBalance, setTokenBalance] = useState("0");
+
+  const [amount, setAmount] = useState("");
+  const [price, setPrice] = useState("");
+  const [status, setStatus] = useState("");
+
+  const [myListings, setMyListings] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const w3 = await getWeb3();
+        const [acc] = await w3.eth.getAccounts();
+        setWeb3(w3);
+        setAccount(acc);
+
+        // ERC20
+        if (!ERC20_ABI || !isAddress(TOKEN_ADDRESS)) throw new Error("ERC20 not configured");
+        const t = new w3.eth.Contract(ERC20_ABI, TOKEN_ADDRESS);
+        setToken(t);
+
+        // KYC
+        if (!KYC_ABI || !isAddress(KYC_ADDRESS)) throw new Error("KYC not configured");
+        const k = new w3.eth.Contract(KYC_ABI, KYC_ADDRESS);
+        setKyc(k);
+
+        // MARKET
+        if (!MARKETPLACE_ABI || !isAddress(MARKETPLACE_ADDRESS)) throw new Error("Marketplace not configured");
+        const m = new w3.eth.Contract(MARKETPLACE_ABI, MARKETPLACE_ADDRESS);
+        setMarket(m);
+
+        // balances & whitelist
+        const bal = await t.methods.balanceOf(acc).call();
+        setTokenBalance(w3.utils.fromWei(bal.toString(), "ether"));
+
+        const wh = await k.methods.isWhitelisted(acc).call();
+        setIsWhitelisted(!!wh);
+
+        await loadMyListings(m, acc);
+
+        window.ethereum.on("accountsChanged", async (accs) => {
+          const a = accs[0];
+          setAccount(a);
+          const b = await t.methods.balanceOf(a).call();
+          setTokenBalance(w3.utils.fromWei(b.toString(), "ether"));
+          const w = await k.methods.isWhitelisted(a).call();
+          setIsWhitelisted(!!w);
+          await loadMyListings(m, a);
+        });
+      } catch (e) {
+        alert(e.message || e);
+      }
+    })();
+  }, []);
+
+  const requestWhitelist = async () => {
+    try {
+      setStatus("⏳ Sending whitelist request...");
+      await kyc.methods.requestKYC().send({ from: account });
+      setStatus("✅ Request sent. Wait for admin approval.");
+    } catch (e) {
+      setStatus("❌ Failed: " + (e.message || e));
+    }
+  };
+
+  const listTokens = async () => {
+    if (!isWhitelisted) return alert("You must be whitelisted to list.");
+    try {
+      setStatus("⏳ Approving & Listing...");
+      const amtWei = web3.utils.toWei(amount || "0", "ether");
+      const priceWei = web3.utils.toWei(price || "0", "ether");
+
+      await token.methods.approve(MARKETPLACE_ADDRESS, amtWei).send({ from: account });
+      await market.methods.listTokens(amtWei, priceWei).send({ from: account });
+
+      setStatus("✅ Listed successfully.");
+      setAmount("");
+      setPrice("");
+      await loadMyListings(market, account);
+    } catch (e) {
+      setStatus("❌ Listing failed: " + (e.message || e));
+    }
+  };
+
+  const loadMyListings = async (marketContract, who) => {
+    const listings = await pullListings(marketContract);
+    const mine = listings.filter((l) => l.seller?.toLowerCase() === who?.toLowerCase());
+    setMyListings(mine);
+  };
+
+  // Pull listings using flexible introspection (supports getListingCount or getActiveListings or manual scan)
+  const pullListings = async (m) => {
+    const out = [];
+
+    // prefer getListingCount + listings(id)
+    if (m.methods.getListingCount) {
+      const count = Number(await m.methods.getListingCount().call());
+      for (let i = 0; i < count; i++) {
+        const li = await m.methods.listings(i).call();
+        out.push({ id: i, ...li });
+      }
+      return out.filter((l) => l.active);
+    }
+
+    // fallback: getActiveListings() returns array of structs
+    if (m.methods.getActiveListings) {
+      const arr = await m.methods.getActiveListings().call();
+      return arr.map((li, i) => ({ id: li.id ?? i, ...li })).filter((l) => l.active);
+    }
+
+    // last resort: scan first N ids
+    const N = 50;
+    for (let i = 0; i < N; i++) {
+      try {
+        const li = await m.methods.listings(i).call();
+        if (li && nonZero(li.seller)) out.push({ id: i, ...li });
+      } catch { break; }
+    }
+    return out.filter((l) => l.active);
+  };
+
+  return (
+    <div style={{ padding: 24 }}>
+      <h1>🏪 Vendor Dashboard</h1>
+      <p><b>Account:</b> {account}</p>
+      <p><b>Token Balance:</b> {tokenBalance}</p>
+      <p><b>Whitelist:</b> {isWhitelisted ? "✅ Verified" : "❌ Not Verified"}</p>
+
+      {!isWhitelisted && (
+        <div style={{ marginBottom: 16 }}>
+          <button onClick={requestWhitelist}>📨 Request Whitelist Approval</button>
+        </div>
+      )}
+
+      {isWhitelisted && (
+        <>
+          <h3>📤 List Tokens</h3>
+          <input
+            placeholder="Amount (tokens)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            style={{ marginRight: 8 }}
+          />
+          <input
+            placeholder="Price (ETH per token)"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            style={{ marginRight: 8 }}
+          />
+          <button onClick={listTokens}>List</button>
+        </>
+      )}
+
+      <p style={{ marginTop: 8 }}>{status}</p>
+
+      <h3 style={{ marginTop: 24 }}>📦 My Listings</h3>
+      {myListings.length === 0 ? (
+        <p>No listings yet.</p>
+      ) : (
+        myListings.map((l) => {
+          const amount = web3.utils.fromWei(String(l.amount || "0"), "ether");
+          const price = web3.utils.fromWei(String(l.pricePerToken || "0"), "ether");
+          const sold  = l.sold ? web3.utils.fromWei(String(l.sold), "ether") : "0";
+          const remaining = (Number(amount) - Number(sold)).toString();
+          return (
+            <div key={l.id} style={{ border: "1px solid #ddd", padding: 12, marginBottom: 8 }}>
+              <p style={{ margin: 0 }}>Listing #{l.id}</p>
+              <p style={{ margin: 0 }}>Price: {price} ETH / token</p>
+              <p style={{ margin: 0 }}>Total: {amount} | Sold: {sold} | Remaining: {remaining}</p>
+              <p style={{ margin: 0 }}>Active: {l.active ? "Yes" : "No"}</p>
+            </div>
+          );
+        })
+      )}
+      <button style={{ marginTop: 8 }} onClick={() => loadMyListings(market, account)}>🔁 Refresh</button>
+    </div>
+  );
+}
